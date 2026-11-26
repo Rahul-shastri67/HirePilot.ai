@@ -1,0 +1,87 @@
+{
+  "organization": "Razorpay",
+  "pattern": "{first}.{last}",
+  "acceptAll": false,
+  "people": [
+    {
+      "firstName": "Vivek",
+      "lastName": "Agarwal",
+      "position": "Vice President of Engineering",
+      "email": "vivek.agarwal@razorpay.com",
+      "confidence": 99,
+      "linkedin": "https://www.linkedin.com/in/vivek-agarwal-03575711"
+    },
+    {
+      "firstName": "Arif",
+      "lastName": "Khan",
+      "position": "CIO",
+      "email": "arif.khan@razorpay.com",
+      "confidence": 98,
+      "linkedin": null
+    },
+    {
+      "firstName": "Varun",
+      "lastName": "Achar",
+      "position": "Senior Director of Engineering",
+      "email": "varun.achar@razorpay.com",
+      "confidence": 98,
+      "linkedin": "https://www.linkedin.com/in/varunachar"
+    },
+    {
+      "firstName": "Arka",
+      "lastName": "Mandal",
+      "position": "AI Engineer",
+      "email": "arka.mandal@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/arkamandal2001"
+    },
+    {
+      "firstName": "Varun",
+      "lastName": "Jindal",
+      "position": "Director of Engineering",
+      "email": "varun.jindal@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/varunjindal9"
+    },
+    {
+      "firstName": "Pavan",
+      "lastName": "Nalakonda",
+      "position": "Head of IT",
+      "email": "n.pavan@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/pnalakonda"
+    },
+    {
+      "firstName": "Aawardhan",
+      "lastName": "Logandan",
+      "position": "Director of Engineering",
+      "email": "aawardhan.logandan@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/aawardhan"
+    },
+    {
+      "firstName": "Anand",
+      "lastName": "Saha",
+      "position": "Director of Engineering",
+      "email": "anand.saha@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/anand-saha"
+    },
+    {
+      "firstName": "Praveen",
+      "lastName": "Parihar",
+      "position": "Chief Information Security Officer",
+      "email": "praveen.parihar@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/praveenparihar"
+    },
+    {
+      "firstName": "Kamlesh",
+      "lastName": "Chandnani",
+      "position": "Director of Frontend Engineering",
+      "email": "kamlesh.c@razorpay.com",
+      "confidence": 95,
+      "linkedin": "https://www.linkedin.com/in/kamleshchandnani"
+    }
+  ]
+}
