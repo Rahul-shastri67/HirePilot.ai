@@ -1,0 +1,20 @@
+{
+  "name": "job-hunter",
+  "version": "1.0.0",
+  "description": "Node.js tools for an AI job-hunting agent team built with Claude Code",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "puppeteer": "^25.16.0"
+  },
+  "scripts": {
+    "start": "node server/src/index.js",
+    "dev": "node --watch server/src/index.js"
+  }
+}
