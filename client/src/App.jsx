@@ -1,5 +1,5 @@
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BriefcaseBusiness,
   LayoutDashboard,
@@ -21,7 +21,8 @@ import {
 } from "lucide-react";
 import "./index.css";
 
-const API_BASE = "http://localhost:5000/api";
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const SAVED_JOBS_KEY = "ai-job-hunter-saved";
 
 const navItems = [
   { label: "Overview", icon: LayoutDashboard },
@@ -35,7 +36,10 @@ function formatDate(value) {
   if (!value) return "Date not available";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
 
   return date.toLocaleDateString("en-IN", {
     day: "numeric",
@@ -44,31 +48,67 @@ function formatDate(value) {
   });
 }
 
+function readSavedJobs() {
+  try {
+    const saved = JSON.parse(
+      localStorage.getItem(SAVED_JOBS_KEY) || "[]"
+    );
+
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
+
 function App() {
   const [activePage, setActivePage] = useState("Find Jobs");
   const [query, setQuery] = useState("React Developer");
   const [location, setLocation] = useState("Noida");
+
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [searched, setSearched] = useState(false);
+
   const [sourceFilter, setSourceFilter] = useState("All sources");
   const [remoteOnly, setRemoteOnly] = useState(false);
+
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [savedJobs, setSavedJobs] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("ai-job-hunter-saved") || "[]");
-    } catch {
-      return [];
+  const [backendStatus, setBackendStatus] = useState("checking");
+
+  const [savedJobs, setSavedJobs] = useState(readSavedJobs);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function checkBackend() {
+      try {
+        const response = await fetch(`${API_BASE}/health`, {
+          signal: controller.signal,
+        });
+
+        setBackendStatus(response.ok ? "connected" : "offline");
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          setBackendStatus("offline");
+        }
+      }
     }
-  });
+
+    checkBackend();
+
+    return () => {
+      controller.abort();
+    };
+  }, []);
 
   const filteredJobs = useMemo(() => {
     let result = jobs;
 
     if (sourceFilter !== "All sources") {
       result = result.filter(
-        (job) => job.source?.toLowerCase() === sourceFilter.toLowerCase()
+        (job) =>
+          job.source?.toLowerCase() === sourceFilter.toLowerCase()
       );
     }
 
@@ -103,7 +143,10 @@ function App() {
         location: location.trim(),
       });
 
-      const response = await fetch(`${API_BASE}/jobs/search?${params}`);
+      const response = await fetch(
+        `${API_BASE}/jobs/search?${params}`
+      );
+
       const data = await response.json();
 
       if (!response.ok || !data.success) {
@@ -112,11 +155,12 @@ function App() {
 
       setJobs(Array.isArray(data.jobs) ? data.jobs : []);
       setActivePage("Find Jobs");
+      setMobileMenu(false);
     } catch (err) {
       setError(
-        err.message.includes("fetch")
-          ? "Backend connect nahi ho raha. Check karo server port 5000 par running hai."
-          : err.message
+        err.message?.toLowerCase().includes("fetch")
+          ? "Server is under maintainance ."
+          : err.message || "Something went wrong. Please try again."
       );
     } finally {
       setLoading(false);
@@ -124,14 +168,29 @@ function App() {
   }
 
   function toggleSave(job) {
-    const exists = savedJobs.some((saved) => saved.url === job.url);
+    const exists = savedJobs.some(
+      (saved) => saved.url === job.url
+    );
 
     const updated = exists
       ? savedJobs.filter((saved) => saved.url !== job.url)
       : [...savedJobs, job];
 
     setSavedJobs(updated);
-    localStorage.setItem("ai-job-hunter-saved", JSON.stringify(updated));
+
+    try {
+      localStorage.setItem(
+        SAVED_JOBS_KEY,
+        JSON.stringify(updated)
+      );
+    } catch {
+      setError("Unable to save this job in your browser.");
+    }
+  }
+
+  function handleNavigation(label) {
+    setActivePage(label);
+    setMobileMenu(false);
   }
 
   const pageTitle =
@@ -143,18 +202,29 @@ function App() {
           ? "Track your applications."
           : activePage === "Contacts"
             ? "Build your professional network."
-            : "Find your next opportunity.";
+            : activePage === "Settings"
+              ? "Your workspace settings."
+              : "Find your next opportunity.";
+
+  const backendStatusText =
+    backendStatus === "checking"
+      ? "Checking backend"
+      : backendStatus === "connected"
+        ? "Backend connected"
+        : "Backend offline";
 
   return (
     <div className="app-shell">
-      <aside className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}>
+      <aside
+        className={`sidebar ${mobileMenu ? "sidebar-open" : ""}`}
+      >
         <div className="brand">
-  <img
-    src="/hirepilot-logo.svg"
-    alt="HirePilot"
-    className="brand-logo"
-  />
-</div>
+          <img
+            src="/hirepilot-logo.svg"
+            alt="HirePilot"
+            className="brand-logo"
+          />
+        </div>
 
         <div className="workspace-label">WORKSPACE</div>
 
@@ -162,16 +232,19 @@ function App() {
           {navItems.map(({ label, icon: Icon }) => (
             <button
               key={label}
-              className={`nav-item ${activePage === label ? "active" : ""}`}
-              onClick={() => {
-                setActivePage(label);
-                setMobileMenu(false);
-              }}
+              className={`nav-item ${
+                activePage === label ? "active" : ""
+              }`}
+              onClick={() => handleNavigation(label)}
+              type="button"
             >
               <Icon size={19} />
               <span>{label}</span>
+
               {label === "Saved Jobs" && savedJobs.length > 0 && (
-                <span className="nav-count">{savedJobs.length}</span>
+                <span className="nav-count">
+                  {savedJobs.length}
+                </span>
               )}
             </button>
           ))}
@@ -179,27 +252,48 @@ function App() {
 
         <div className="sidebar-bottom">
           <div className="pro-card">
-            <div className="pro-icon"><Sparkles size={18} /></div>
+            <div className="pro-icon">
+              <Sparkles size={18} />
+            </div>
+
             <h3>Career goals</h3>
-            <p>Keep moving toward your next opportunity.</p>
+            <p>
+              Keep moving toward your next opportunity.
+            </p>
+
             <div className="progress-track">
               <div className="progress-value" />
             </div>
-            <span className="progress-caption">Job search workspace</span>
+
+            <span className="progress-caption">
+              Job search workspace
+            </span>
           </div>
 
-          <button className="nav-item settings-item" onClick={() => setActivePage("Settings")}>
+          <button
+            className={`nav-item settings-item ${
+              activePage === "Settings" ? "active" : ""
+            }`}
+            onClick={() => handleNavigation("Settings")}
+            type="button"
+          >
             <Settings size={19} />
             <span>Settings</span>
           </button>
 
           <div className="profile-row">
             <div className="avatar">RS</div>
+
             <div className="profile-info">
               <strong>Rahul Shastri</strong>
               <span>Job seeker</span>
             </div>
-            <button className="icon-button" aria-label="Profile options">
+
+            <button
+              className="icon-button"
+              aria-label="Profile options"
+              type="button"
+            >
               <Settings size={17} />
             </button>
           </div>
@@ -211,6 +305,7 @@ function App() {
           className="mobile-overlay"
           onClick={() => setMobileMenu(false)}
           aria-label="Close sidebar"
+          type="button"
         />
       )}
 
@@ -220,18 +315,39 @@ function App() {
             className="mobile-menu-button icon-button"
             onClick={() => setMobileMenu(true)}
             aria-label="Open menu"
+            type="button"
           >
             <Menu size={22} />
           </button>
+
+          <button
+            className="mobile-close icon-button"
+            onClick={() => setMobileMenu(false)}
+            aria-label="Close menu"
+            type="button"
+          >
+            <X size={20} />
+          </button>
+
           <div className="breadcrumb">
-            Workspace <span>/</span> <strong>{activePage}</strong>
+            Workspace <span>/</span>{" "}
+            <strong>{activePage}</strong>
           </div>
+
           <div className="topbar-actions">
-            <div className="api-status">
+            <div
+              className={`api-status status-${backendStatus}`}
+              title={backendStatusText}
+            >
               <span className="status-dot" />
-              Backend connected
+              {backendStatusText}
             </div>
-            <button className="icon-button notification-button" aria-label="Notifications">
+
+            <button
+              className="icon-button notification-button"
+              aria-label="Notifications"
+              type="button"
+            >
               <Bell size={19} />
             </button>
           </div>
@@ -240,12 +356,19 @@ function App() {
         <div className="page-container">
           <section className="welcome-section">
             <div>
-              <div className="eyebrow"><Sparkles size={14} /> YOUR CAREER, IN ONE PLACE</div>
+              <div className="eyebrow">
+                <Sparkles size={14} />
+                YOUR CAREER, IN ONE PLACE
+              </div>
+
               <h1>{pageTitle}</h1>
+
               <p className="welcome-subtitle">
-                Discover relevant roles, organize your search, and take the next step.
+                Discover relevant roles, organize your search,
+                and take the next step.
               </p>
             </div>
+
             <div className="welcome-date">
               <span>YOUR WORKSPACE</span>
               <strong>2026 Job Search</strong>
@@ -254,21 +377,33 @@ function App() {
 
           <section className="search-panel">
             <div className="search-panel-heading">
-              <div className="search-heading-icon"><Search size={18} /></div>
+              <div className="search-heading-icon">
+                <Search size={18} />
+              </div>
+
               <div>
                 <h2>Search opportunities</h2>
-                <p>Find jobs from multiple sources in one place.</p>
+                <p>
+                  Find jobs from multiple sources in one place.
+                </p>
               </div>
             </div>
 
-            <form className="search-form" onSubmit={searchJobs}>
+            <form
+              className="search-form"
+              onSubmit={searchJobs}
+            >
               <label className="search-field">
                 <span>JOB TITLE OR KEYWORD</span>
+
                 <div className="field-input">
                   <Search size={18} />
+
                   <input
                     value={query}
-                    onChange={(event) => setQuery(event.target.value)}
+                    onChange={(event) =>
+                      setQuery(event.target.value)
+                    }
                     placeholder="React Developer, QA Tester..."
                   />
                 </div>
@@ -276,25 +411,47 @@ function App() {
 
               <label className="search-field location-field">
                 <span>LOCATION</span>
+
                 <div className="field-input">
                   <MapPin size={18} />
+
                   <input
                     value={location}
-                    onChange={(event) => setLocation(event.target.value)}
+                    onChange={(event) =>
+                      setLocation(event.target.value)
+                    }
                     placeholder="Noida, Delhi, Gurugram..."
                   />
                 </div>
               </label>
 
-              <button className="search-button" type="submit" disabled={loading}>
-                {loading ? <RefreshCw size={18} className="spin" /> : <Search size={18} />}
+              <button
+                className="search-button"
+                type="submit"
+                disabled={loading}
+              >
+                {loading ? (
+                  <RefreshCw
+                    size={18}
+                    className="spin"
+                  />
+                ) : (
+                  <Search size={18} />
+                )}
+
                 {loading ? "Searching..." : "Search jobs"}
               </button>
             </form>
 
             <div className="quick-searches">
               <span>Try:</span>
-              {["React Developer", "MERN Stack", "QA Tester", "Frontend Intern"].map((item) => (
+
+              {[
+                "React Developer",
+                "MERN Stack",
+                "QA Tester",
+                "Frontend Intern",
+              ].map((item) => (
                 <button
                   key={item}
                   onClick={() => setQuery(item)}
@@ -310,38 +467,78 @@ function App() {
           <section className="stats-grid">
             <div className="stat-card">
               <div className="stat-top">
-                <span className="stat-icon purple"><BriefcaseBusiness size={18} /></span>
-                <span className="stat-label">Jobs found</span>
+                <span className="stat-icon purple">
+                  <BriefcaseBusiness size={18} />
+                </span>
+
+                <span className="stat-label">
+                  Jobs found
+                </span>
               </div>
-              <div className="stat-value">{jobs.length}</div>
-              <div className="stat-foot">Across connected sources</div>
+
+              <div className="stat-value">
+                {jobs.length}
+              </div>
+
+              <div className="stat-foot">
+                Across connected sources
+              </div>
             </div>
 
             <div className="stat-card">
               <div className="stat-top">
-                <span className="stat-icon blue"><Bookmark size={18} /></span>
-                <span className="stat-label">Saved jobs</span>
+                <span className="stat-icon blue">
+                  <Bookmark size={18} />
+                </span>
+
+                <span className="stat-label">
+                  Saved jobs
+                </span>
               </div>
-              <div className="stat-value">{savedJobs.length}</div>
-              <div className="stat-foot">Your shortlist</div>
+
+              <div className="stat-value">
+                {savedJobs.length}
+              </div>
+
+              <div className="stat-foot">
+                Your shortlist
+              </div>
             </div>
 
             <div className="stat-card">
               <div className="stat-top">
-                <span className="stat-icon green"><ClipboardList size={18} /></span>
-                <span className="stat-label">Applications</span>
+                <span className="stat-icon green">
+                  <ClipboardList size={18} />
+                </span>
+
+                <span className="stat-label">
+                  Applications
+                </span>
               </div>
+
               <div className="stat-value">0</div>
-              <div className="stat-foot">Applications tracked</div>
+
+              <div className="stat-foot">
+                Applications tracked
+              </div>
             </div>
 
             <div className="stat-card">
               <div className="stat-top">
-                <span className="stat-icon orange"><Users size={18} /></span>
-                <span className="stat-label">Contacts</span>
+                <span className="stat-icon orange">
+                  <Users size={18} />
+                </span>
+
+                <span className="stat-label">
+                  Contacts
+                </span>
               </div>
+
               <div className="stat-value">—</div>
-              <div className="stat-foot">Hunter API available</div>
+
+              <div className="stat-foot">
+                Hunter API available
+              </div>
             </div>
           </section>
 
@@ -349,9 +546,17 @@ function App() {
             <div className="jobs-header">
               <div>
                 <div className="section-title-row">
-                  <h2>{activePage === "Saved Jobs" ? "Saved opportunities" : "Recommended jobs"}</h2>
-                  <span className="results-badge">{filteredJobs.length} results</span>
+                  <h2>
+                    {activePage === "Saved Jobs"
+                      ? "Saved opportunities"
+                      : "Recommended jobs"}
+                  </h2>
+
+                  <span className="results-badge">
+                    {filteredJobs.length} results
+                  </span>
                 </div>
+
                 <p>
                   {searched
                     ? `Results for ${query} in ${location}`
@@ -362,111 +567,240 @@ function App() {
               <div className="job-controls">
                 <label className="source-select">
                   <SlidersHorizontal size={16} />
+
                   <select
                     value={sourceFilter}
-                    onChange={(event) => setSourceFilter(event.target.value)}
+                    onChange={(event) =>
+                      setSourceFilter(event.target.value)
+                    }
                   >
                     <option>All sources</option>
-                    {[...new Set(jobs.map((job) => job.source).filter(Boolean))].map((source) => (
-                      <option key={source}>{source}</option>
+
+                    {[
+                      ...new Set(
+                        jobs
+                          .map((job) => job.source)
+                          .filter(Boolean)
+                      ),
+                    ].map((source) => (
+                      <option key={source}>
+                        {source}
+                      </option>
                     ))}
                   </select>
                 </label>
+
                 <label className="remote-toggle">
                   <input
                     type="checkbox"
                     checked={remoteOnly}
-                    onChange={(event) => setRemoteOnly(event.target.checked)}
+                    onChange={(event) =>
+                      setRemoteOnly(event.target.checked)
+                    }
                   />
                   Remote
                 </label>
               </div>
             </div>
 
-            {error && <div className="error-message">{error}</div>}
+            {error && (
+              <div className="error-message">
+                {error}
+              </div>
+            )}
 
             {!searched && !loading && (
               <div className="empty-state">
-                <div className="empty-icon"><Search size={28} /></div>
-                <h3>Ready to find your next role?</h3>
-                <p>Enter a job title and location above, then click Search jobs.</p>
-                <button className="secondary-button" onClick={() => searchJobs()}>
-                  Search React jobs in Noida <ArrowUpRight size={16} />
+                <div className="empty-icon">
+                  <Search size={28} />
+                </div>
+
+                <h3>
+                  Ready to find your next role?
+                </h3>
+
+                <p>
+                  Enter a job title and location above,
+                  then click Search jobs.
+                </p>
+
+                <button
+                  className="secondary-button"
+                  onClick={() => searchJobs()}
+                  type="button"
+                >
+                  Search React jobs in Noida
+                  <ArrowUpRight size={16} />
                 </button>
               </div>
             )}
 
             {loading && (
-              <div className="loading-state">
-                <RefreshCw size={24} className="spin" />
-                <span>Finding opportunities...</span>
+              <div className="job-list">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    className="job-card job-skeleton"
+                    key={`skeleton-${index}`}
+                    aria-hidden="true"
+                  >
+                    <div className="skeleton-logo" />
+
+                    <div className="skeleton-content">
+                      <div className="skeleton-line skeleton-title" />
+                      <div className="skeleton-line skeleton-company" />
+                      <div className="skeleton-line skeleton-meta" />
+                    </div>
+
+                    <div className="skeleton-actions">
+                      <div className="skeleton-button" />
+                      <div className="skeleton-button skeleton-apply" />
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {!loading && searched && filteredJobs.length === 0 && !error && (
-              <div className="empty-state">
-                <div className="empty-icon"><BriefcaseBusiness size={28} /></div>
-                <h3>No matching jobs found</h3>
-                <p>Try another keyword, location, or remove a filter.</p>
-              </div>
-            )}
+            {!loading &&
+              searched &&
+              filteredJobs.length === 0 &&
+              !error && (
+                <div className="empty-state">
+                  <div className="empty-icon">
+                    <BriefcaseBusiness size={28} />
+                  </div>
+
+                  <h3>No matching jobs found</h3>
+
+                  <p>
+                    Try another keyword, location,
+                    or remove a filter.
+                  </p>
+                </div>
+              )}
 
             <div className="job-list">
-              {!loading && filteredJobs.map((job, index) => {
-                const isSaved = savedJobs.some((saved) => saved.url === job.url);
+              {!loading &&
+                filteredJobs.map((job, index) => {
+                  const isSaved = savedJobs.some(
+                    (saved) => saved.url === job.url
+                  );
 
-                return (
-                  <article className="job-card" key={`${job.url}-${index}`}>
-                    <div className="company-logo">
-                      {(job.company || "C").slice(0, 1).toUpperCase()}
-                    </div>
-
-                    <div className="job-main">
-                      <div className="job-title-row">
-                        <h3>{job.title || "Job title unavailable"}</h3>
-                        {job.remote && <span className="remote-tag">Remote</span>}
-                      </div>
-                      <div className="company-name">{job.company || "Company not listed"}</div>
-
-                      <div className="job-meta">
-                        <span><MapPin size={14} /> {job.location || "Location not listed"}</span>
-                        <span><Clock3 size={14} /> {formatDate(job.postedAt)}</span>
-                        {job.salary && <span className="salary-text">{job.salary}</span>}
+                  return (
+                    <article
+                      className="job-card"
+                      key={`${job.url}-${index}`}
+                    >
+                      <div className="company-logo">
+                        {(job.company || "C")
+                          .slice(0, 1)
+                          .toUpperCase()}
                       </div>
 
-                      <div className="job-card-bottom">
-                        <span className="source-tag">{job.source || "Job board"}</span>
-                        {job.api && <span className="source-origin">via {job.api}</span>}
-                      </div>
-                    </div>
+                      <div className="job-main">
+                        <div className="job-title-row">
+                          <h3>
+                            {job.title ||
+                              "Job title unavailable"}
+                          </h3>
 
-                    <div className="job-actions">
-                      <button
-                        className={`save-button ${isSaved ? "saved" : ""}`}
-                        onClick={() => toggleSave(job)}
-                        aria-label={isSaved ? "Remove saved job" : "Save job"}
-                        title={isSaved ? "Remove saved job" : "Save job"}
-                      >
-                        <Bookmark size={18} fill={isSaved ? "currentColor" : "none"} />
-                      </button>
-                      <a
-                        className="apply-button"
-                        href={job.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Apply <ExternalLink size={15} />
-                      </a>
-                    </div>
-                  </article>
-                );
-              })}
+                          {job.remote && (
+                            <span className="remote-tag">
+                              Remote
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="company-name">
+                          {job.company ||
+                            "Company not listed"}
+                        </div>
+
+                        <div className="job-meta">
+                          <span>
+                            <MapPin size={14} />
+                            {job.location ||
+                              "Location not listed"}
+                          </span>
+
+                          <span>
+                            <Clock3 size={14} />
+                            {formatDate(job.postedAt)}
+                          </span>
+
+                          {job.salary && (
+                            <span className="salary-text">
+                              {job.salary}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="job-card-bottom">
+                          <span className="source-tag">
+                            {job.source || "Job board"}
+                          </span>
+
+                          {job.api && (
+                            <span className="source-origin">
+                              via {job.api}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="job-actions">
+                        <button
+                          className={`save-button ${
+                            isSaved ? "saved" : ""
+                          }`}
+                          onClick={() => toggleSave(job)}
+                          aria-label={
+                            isSaved
+                              ? "Remove saved job"
+                              : "Save job"
+                          }
+                          title={
+                            isSaved
+                              ? "Remove saved job"
+                              : "Save job"
+                          }
+                          type="button"
+                        >
+                          <Bookmark
+                            size={18}
+                            fill={
+                              isSaved
+                                ? "currentColor"
+                                : "none"
+                            }
+                          />
+                        </button>
+
+                        <a
+                          className="apply-button"
+                          href={job.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Apply
+                          <ExternalLink size={15} />
+                        </a>
+                      </div>
+                    </article>
+                  );
+                })}
             </div>
           </section>
 
           <footer className="footer">
-            <span>AI Job Hunter <span className="footer-dot">•</span> Career workspace</span>
-            <span>Built to make your job search easier.</span>
+            <span>
+              HirePilot
+              <span className="footer-dot">•</span>
+              Career workspace
+            </span>
+
+            <span>
+              Built to make your job search easier.
+            </span>
           </footer>
         </div>
       </main>
